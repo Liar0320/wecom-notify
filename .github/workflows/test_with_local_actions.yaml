@@ -17,9 +17,9 @@ jobs:
           - 测试消息
           DOC
 
-      - name: Dry run notify
+      - name: Send notify
         uses: ./
         with:
           body_path: CHANGELOG.md
-          robots_key: dummy
-          dry_run: true
+          robots_key: ${{ secrets.WECOM_ROBOTS_KEY }}
+          dry_run: false
