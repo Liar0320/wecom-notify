@@ -1,0 +1,30 @@
+name: Manually Triggered WeCom Notify
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: '设为 false 执行真实推送'
+        default: 'true'
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Generate changelog
+        run: |
+          cat <<'DOC' > CHANGELOG.md
+          ## 发布说明
+
+          - 手动触发测试
+          DOC
+
+      - name: Send to WeCom
+        uses: Liar0320/wecom-notify@v1.0.0
+        with:
+          body_path: CHANGELOG.md
+          robots_key: ${{ secrets.WECOM_ROBOTS_KEY }}
+          dry_run: ${{ github.event.inputs.dry_run }}

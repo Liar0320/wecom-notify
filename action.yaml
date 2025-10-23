@@ -1,0 +1,113 @@
+name: 'WeCom Notify'
+description: 'Send markdown content to WeCom robot via webhook'
+author: 'Liar0320'
+branding:
+  icon: 'send'
+  color: 'blue'
+
+inputs:
+  robots_key:
+    required: true
+    description: 'WeCom robot webhook key'
+  body_path:
+    required: true
+    description: 'Path to the markdown file used as message content'
+  encoding:
+    required: false
+    default: 'utf-8'
+    description: 'File encoding for body_path'
+  dry_run:
+    required: false
+    default: 'false'
+    description: 'Skip actual HTTP request when true'
+
+runs:
+  using: composite
+  steps:
+    - name: Send WeCom notification
+      shell: bash
+      run: |
+        set -euo pipefail
+
+        requirement_check() {
+          if ! command -v "$1" >/dev/null 2>&1; then
+            echo "缺少依赖工具: $1" >&2
+            exit 1
+          fi
+        }
+
+        requirement_check jq
+        requirement_check curl
+        requirement_check iconv
+
+        to_lower() {
+          printf '%s' "$1" | tr 'A-Z' 'a-z'
+        }
+
+        BODY_PATH="${{ inputs.body_path }}"
+        ROBOTS_KEY="${{ inputs.robots_key }}"
+        ENCODING="${{ inputs.encoding }}"
+        DRY_RUN="$(to_lower "${{ inputs.dry_run }}")"
+
+        if [[ ! -f "$BODY_PATH" ]]; then
+          echo "找不到 body_path 对应的文件: $BODY_PATH" >&2
+          exit 1
+        fi
+
+        if ! CONTENT=$(iconv -f "$ENCODING" -t "utf-8" "$BODY_PATH"); then
+          echo "读取文件失败，请确认编码与路径" >&2
+          exit 1
+        fi
+
+        CONTENT="${CONTENT%$'\n'}"
+        if [[ -z "$CONTENT" ]]; then
+          echo "文件 $BODY_PATH 内容为空" >&2
+          exit 1
+        fi
+
+        PAYLOAD=$(jq -n --arg content "$CONTENT" '{msgtype:"markdown", markdown:{content:$content}}')
+
+        echo "🚀 -> sendMsg -> payload: $PAYLOAD"
+
+        if [[ "$DRY_RUN" == "true" ]]; then
+          echo "dry_run=true，跳过实际请求"
+          exit 0
+        fi
+
+        HTTP_RESPONSE=$(mktemp)
+        HTTP_STATUS=0
+
+        if ! HTTP_STATUS=$(curl -sS -o "$HTTP_RESPONSE" -w '%{http_code}' \
+          -X POST \
+          -H 'Content-Type: application/json' \
+          -d "$PAYLOAD" \
+          "https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=$ROBOTS_KEY"); then
+          echo "请求企业微信接口失败" >&2
+          rm -f "$HTTP_RESPONSE"
+          exit 1
+        fi
+
+        RESPONSE_BODY=$(cat "$HTTP_RESPONSE")
+        rm -f "$HTTP_RESPONSE"
+
+        echo "WeCom HTTP 状态: $HTTP_STATUS"
+        echo "WeCom 响应: $RESPONSE_BODY"
+
+        if [[ "$HTTP_STATUS" -lt 200 || "$HTTP_STATUS" -ge 300 ]]; then
+          echo "WeCom 返回非成功状态码" >&2
+          exit 1
+        fi
+
+        if ! ERRCODE=$(printf '%s' "$RESPONSE_BODY" | jq -r '.errcode // empty' 2>/dev/null); then
+          echo "解析响应失败" >&2
+          exit 1
+        fi
+
+        if [[ "$ERRCODE" != "0" ]]; then
+          ERRMSG=$(printf '%s' "$RESPONSE_BODY" | jq -r '.errmsg // "unknown"')
+          echo "WeCom 返回错误: $ERRMSG ($ERRCODE)" >&2
+          exit 1
+        fi
+      env:
+        LC_ALL: en_US.UTF-8
+        LANG: en_US.UTF-8

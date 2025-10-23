@@ -1,0 +1,25 @@
+name: Test
+
+on: [push, pull_request]
+
+jobs:
+  main:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Prepare changelog
+        run: |
+          cat <<'DOC' > CHANGELOG.md
+          # 更新日志
+
+          - 测试消息
+          DOC
+
+      - name: Dry run notify
+        uses: ./
+        with:
+          body_path: CHANGELOG.md
+          robots_key: dummy
+          dry_run: true
