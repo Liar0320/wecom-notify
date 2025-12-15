@@ -81,7 +81,7 @@ runs:
           -X POST \
           -H 'Content-Type: application/json; charset=utf-8' \
           --data-binary "$PAYLOAD" \
-          "https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=$ROBOTS_KEY"); then
+          "https://workflow.auditoryworks.co/webhook/release-note?key=$ROBOTS_KEY"); then
           echo "请求企业微信接口失败" >&2
           rm -f "$HTTP_RESPONSE"
           exit 1
